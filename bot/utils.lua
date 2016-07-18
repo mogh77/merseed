@@ -12,7 +12,6 @@ JSON = (loadfile "./libs/dkjson.lua")()
 
 http.TIMEOUT = 10
 
-
 function get_receiver(msg)
   if msg.to.type == 'user' then
     return 'user#id'..msg.from.id
@@ -33,12 +32,12 @@ function is_chat_msg( msg )
 end
 
 function string.random(length)
-   local str = "";
-   for i = 1, length do
-      math.random(97, 122)
-      str = str..string.char(math.random(97, 122));
-   end
-   return str;
+  local str = "";
+  for i = 1, length do
+    math.random(97, 122)
+    str = str..string.char(math.random(97, 122));
+  end
+  return str;
 end
 
 function string:split(sep)
@@ -149,13 +148,68 @@ function run_command(str)
   return result
 end
 
--- User has privileges
+-- User has superuser privileges
 function is_sudo(msg)
   local var = false
   -- Check users id in config
   for v,user in pairs(_config.sudo_users) do
     if user == msg.from.id then
       var = true
+    end
+  end
+  return var
+end
+
+-- user has admins privileges
+function is_admin(msg)
+  local var = false
+  local data = load_data(_config.moderation.data)
+  local user = msg.from.id
+  local admins = 'admins'
+  if data[tostring(admins)] then
+    if data[tostring(admins)][tostring(user)] then
+      var = true
+    end
+  end
+  for v,user in pairs(_config.sudo_users) do
+    if user == msg.from.id then
+        var = true
+    end
+  end
+  return var
+end
+
+function is_administrator(user_id)
+  local var = true
+  local data = load_data(_config.moderation.data)
+  if data[tostring(admins)] then
+    if data['admins'][user_id] then
+      var = false
+    end
+  end
+  return var
+end
+
+-- user has moderator privileges
+function is_mod(msg)
+  local var = false
+  local data = load_data(_config.moderation.data)
+  local user = msg.from.id
+  if data[tostring(msg.to.id)] then
+    if data[tostring(msg.to.id)]['moderators'] then
+      if data[tostring(msg.to.id)]['moderators'][tostring(user)] then
+        var = true
+      end
+    end
+  end
+  if data['admins'] then
+    if data['admins'][tostring(user)] then
+      var = true
+    end
+  end
+  for v,user in pairs(_config.sudo_users) do
+    if user == msg.from.id then
+        var = true
     end
   end
   return var
@@ -388,6 +442,15 @@ end
 
 -- Check if user can use the plugin
 function user_allowed(plugin, msg)
+  -- Check user if plugin moderated = true
+  if plugin.moderated and not is_mod(msg) then -- check if user is a moderator
+    if plugin.moderated and not is_admin(msg) then -- check if user is an administrator
+      if plugin.moderated and not is_sudo(msg) then -- check if user is a sudoers
+        return false
+      end
+    end
+  end
+  -- check user if plugins privileged = true
   if plugin.privileged and not is_sudo(msg) then
     return false
   end
@@ -396,52 +459,52 @@ end
 
 
 function send_order_msg(destination, msgs)
-   local cb_extra = {
-      destination = destination,
-      msgs = msgs
-   }
-   send_order_msg_callback(cb_extra, true)
+  local cb_extra = {
+    destination = destination,
+    msgs = msgs
+  }
+  send_order_msg_callback(cb_extra, true)
 end
 
 function send_order_msg_callback(cb_extra, success, result)
-   local destination = cb_extra.destination
-   local msgs = cb_extra.msgs
-   local file_path = cb_extra.file_path
-   if file_path ~= nil then
-      os.remove(file_path)
-      print("Deleted: " .. file_path)
-   end
-   if type(msgs) == 'string' then
-      send_large_msg(destination, msgs)
-   elseif type(msgs) ~= 'table' then
-      return
-   end
-   if #msgs < 1 then
-      return
-   end
-   local msg = table.remove(msgs, 1)
-   local new_cb_extra = {
-      destination = destination,
-      msgs = msgs
-   }
-   if type(msg) == 'string' then
-      send_msg(destination, msg, send_order_msg_callback, new_cb_extra)
-   elseif type(msg) == 'table' then
-      local typ = msg[1]
-      local nmsg = msg[2]
-      new_cb_extra.file_path = nmsg
-      if typ == 'document' then
-         send_document(destination, nmsg, send_order_msg_callback, new_cb_extra)
-      elseif typ == 'image' or typ == 'photo' then
-         send_photo(destination, nmsg, send_order_msg_callback, new_cb_extra)
-      elseif typ == 'audio' then
-         send_audio(destination, nmsg, send_order_msg_callback, new_cb_extra)
-      elseif typ == 'video' then
-         send_video(destination, nmsg, send_order_msg_callback, new_cb_extra)
-      else
-         send_file(destination, nmsg, send_order_msg_callback, new_cb_extra)
-      end
-   end
+  local destination = cb_extra.destination
+  local msgs = cb_extra.msgs
+  local file_path = cb_extra.file_path
+  if file_path ~= nil then
+    os.remove(file_path)
+    print("Deleted: " .. file_path)
+  end
+  if type(msgs) == 'string' then
+    send_large_msg(destination, msgs)
+  elseif type(msgs) ~= 'table' then
+    return
+  end
+  if #msgs < 1 then
+    return
+  end
+  local msg = table.remove(msgs, 1)
+  local new_cb_extra = {
+    destination = destination,
+    msgs = msgs
+  }
+  if type(msg) == 'string' then
+    send_msg(destination, msg, send_order_msg_callback, new_cb_extra)
+  elseif type(msg) == 'table' then
+    local typ = msg[1]
+    local nmsg = msg[2]
+    new_cb_extra.file_path = nmsg
+    if typ == 'document' then
+      send_document(destination, nmsg, send_order_msg_callback, new_cb_extra)
+    elseif typ == 'image' or typ == 'photo' then
+      send_photo(destination, nmsg, send_order_msg_callback, new_cb_extra)
+    elseif typ == 'audio' then
+      send_audio(destination, nmsg, send_order_msg_callback, new_cb_extra)
+    elseif typ == 'video' then
+      send_video(destination, nmsg, send_order_msg_callback, new_cb_extra)
+    else
+      send_file(destination, nmsg, send_order_msg_callback, new_cb_extra)
+    end
+  end
 end
 
 -- Same as send_large_msg_callback but friendly params
@@ -527,432 +590,4 @@ function unescape_html(str)
     return var
   end)
   return new
-end
-
-
-
---Check if this chat is realm or not
-function is_realm(msg)
-  local var = false
-  local realms = 'realms'
-  local data = load_data(_config.moderation.data)
-  local chat = msg.to.id
-  if data[tostring(realms)] then
-    if data[tostring(realms)][tostring(msg.to.id)] then
-       var = true
-       end
-       return var
-  end
-end
---Check if this chat is a group or not
-function is_group(msg)
-  local var = false
-  local groups = 'groups'
-  local data = load_data(_config.moderation.data)
-  local chat = msg.to.id
-  if data[tostring(groups)] then
-    if data[tostring(groups)][tostring(msg.to.id)] then
-       var = true
-       end
-       return var
-  end
-end
-
-
-function savelog(group, logtxt)
-
-local text = (os.date("[ %c ]=>  "..logtxt.."\n \n"))
-local file = io.open("./groups/logs/"..group.."log.txt", "a")
-
-file:write(text)
-
-file:close()
-
-end
-
-function user_print_name(user)
-   if user.print_name then
-      return user.print_name
-   end
-   local text = ''
-   if user.first_name then
-      text = user.last_name..' '
-   end
-   if user.lastname then
-      text = text..user.last_name
-   end
-   return text
-end
-
---Check if user is the owner of that group or not
-function is_owner(msg)
-  local var = false
-  local data = load_data(_config.moderation.data)
-  local user = msg.from.id
-  
-  if data[tostring(msg.to.id)] then
-    if data[tostring(msg.to.id)]['set_owner'] then
-      if data[tostring(msg.to.id)]['set_owner'] == tostring(user) then
-        var = true
-      end
-    end
-  end
-
-  if data['admins'] then
-    if data['admins'][tostring(user)] then
-      var = true
-    end
-  end
-  for v,user in pairs(_config.sudo_users) do
-    if user == msg.from.id then
-        var = true
-    end
-  end
-  return var
-end
-
-function is_owner2(user_id, group_id)
-  local var = false
-  local data = load_data(_config.moderation.data)
-
-  if data[tostring(group_id)] then
-    if data[tostring(group_id)]['set_owner'] then
-      if data[tostring(group_id)]['set_owner'] == tostring(user_id) then
-        var = true
-      end
-    end
-  end
-  
-  if data['admins'] then
-    if data['admins'][tostring(user_id)] then
-      var = true
-    end
-  end
-  for v,user in pairs(_config.sudo_users) do
-    if user == user_id then
-        var = true
-    end
-  end
-  return var
-end
-
---Check if user is admin or not
-function is_admin(msg)
-  local var = false
-  local data = load_data(_config.moderation.data)
-  local user = msg.from.id
-  local admins = 'admins'
-  if data[tostring(admins)] then
-    if data[tostring(admins)][tostring(user)] then
-      var = true
-    end
-  end
-  for v,user in pairs(_config.sudo_users) do
-    if user == msg.from.id then
-        var = true
-    end
-  end
-  return var
-end
-
-function is_admin2(user_id)
-  local var = false
-  local data = load_data(_config.moderation.data)
-  local user = user_id
-  local admins = 'admins'
-  if data[tostring(admins)] then
-    if data[tostring(admins)][tostring(user)] then
-      var = true
-    end
-  end
-  for v,user in pairs(_config.sudo_users) do
-    if user == user_id then
-        var = true
-    end
-  end
-  return var
-end
-
-
-
---Check if user is the mod of that group or not
-function is_momod(msg)
-  local var = false
-  local data = load_data(_config.moderation.data)
-  local user = msg.from.id
-  if data[tostring(msg.to.id)] then
-    if data[tostring(msg.to.id)]['moderators'] then
-      if data[tostring(msg.to.id)]['moderators'][tostring(user)] then
-        var = true
-      end
-    end
-  end
-
-  if data[tostring(msg.to.id)] then
-    if data[tostring(msg.to.id)]['set_owner'] then
-      if data[tostring(msg.to.id)]['set_owner'] == tostring(user) then
-        var = true
-      end
-    end
-  end
-
-  if data['admins'] then
-    if data['admins'][tostring(user)] then
-      var = true
-    end
-  end
-  for v,user in pairs(_config.sudo_users) do
-    if user == msg.from.id then
-        var = true
-    end
-  end
-  return var
-end
-
-function is_momod2(user_id, group_id)
-  local var = false
-  local data = load_data(_config.moderation.data)
-  local usert = user_id
-  if data[tostring(group_id)] then
-    if data[tostring(group_id)]['moderators'] then
-      if data[tostring(group_id)]['moderators'][tostring(usert)] then
-        var = true
-      end
-    end
-  end
-
-  if data[tostring(group_id)] then
-    if data[tostring(group_id)]['set_owner'] then
-      if data[tostring(group_id)]['set_owner'] == tostring(user_id) then
-        var = true
-      end
-    end
-  end
-  
-  if data['admins'] then
-    if data['admins'][tostring(user_id)] then
-      var = true
-    end
-  end
-  for v,user in pairs(_config.sudo_users) do
-    if user == usert then
-        var = true
-    end
-  end
-  return var
-end
-
--- Returns the name of the sender
-function kick_user(user_id, chat_id) 
-  if tonumber(user_id) == tonumber(our_id) then -- Ignore bot
-    return
-  end
-  if is_owner2(user_id, chat_id) then -- Ignore admins
-    return
-  end
-  local chat = 'chat#id'..chat_id
-  local user = 'user#id'..user_id
-  chat_del_user(chat, user, ok_cb, true)
-end
-
--- Ban
-function ban_user(user_id, chat_id)
-  if tonumber(user_id) == tonumber(our_id) then -- Ignore bot
-    return
-  end
-  if is_admin2(user_id) then -- Ignore admins
-    return
-  end
-  -- Save to redis
-  local hash =  'banned:'..chat_id
-  redis:sadd(hash, user_id)
-  -- Kick from chat
-  kick_user(user_id, chat_id)
-end
--- Global ban
-function banall_user(user_id)  
-  if tonumber(user_id) == tonumber(our_id) then -- Ignore bot
-    return
-  end
-  if is_admin2(user_id) then -- Ignore admins
-    return
-  end
-  -- Save to redis
-  local hash =  'gbanned'
-  redis:sadd(hash, user_id)
-end
--- Global unban
-function unbanall_user(user_id)
-  --Save on redis  
-  local hash =  'gbanned'
-  redis:srem(hash, user_id)
-end
-
--- Check if user_id is banned in chat_id or not
-function is_banned(user_id, chat_id)
-  --Save on redis  
-  local hash =  'banned:'..chat_id
-  local banned = redis:sismember(hash, user_id)
-  return banned or false
-end
-
--- Check if user_id is globally banned or not
-function is_gbanned(user_id)
-  --Save on redis
-  local hash =  'gbanned'
-  local banned = redis:sismember(hash, user_id)
-  return banned or false
-end
-
--- Returns chat_id ban list
-function ban_list(chat_id)
-  local hash =  'banned:'..chat_id
-  local list = redis:smembers(hash)
-  local text = "Ban list !\n\n"
-  for k,v in pairs(list) do
- 		local user_info = redis:hgetall('user:'..v)
--- 		vardump(user_info)
-		if user_info then
-		  if user_info.username then
-		    user = '@'..user_info.username
-	    elseif user_info.print_name and not user_info.username then
-	      user = string.gsub(user_info.print_name, "_", " ")
-  	  else 
-        user = ''
-      end
-      text = text..k.." - "..user.." ["..v.."]\n"
-		end
-	end
- return text
-end
-
--- Returns globally ban list
-function banall_list() 
-  local hash =  'gbanned'
-  local list = redis:smembers(hash)
-  local text = "global bans !\n\n"
-  for k,v in pairs(list) do
- 		local user_info = redis:hgetall('user:'..v)
--- 		vardump(user_info)
-		if user_info then
-		  if user_info.username then
-		    user = '@'..user_info.username
-	    elseif user_info.print_name and not user_info.username then
-	      user = string.gsub(user_info.print_name, "_", " ")
-  	  else 
-        user = ''
-      end
-      text = text..k.." - "..user.." ["..v.."]\n"
-		end
-	end
- return text
-end
-
--- /id by reply
-function get_message_callback_id(extra, success, result)
-    if result.to.type == 'chat' then
-        local chat = 'chat#id'..result.to.id
-        send_large_msg(chat, result.from.id)
-    else
-        return 'Use This in Your Groups'
-    end
-end
-
--- kick by reply for mods and owner
-function Kick_by_reply(extra, success, result)
-  if result.to.type == 'chat' then
-    local chat = 'chat#id'..result.to.id
-    if tonumber(result.from.id) == tonumber(our_id) then -- Ignore bot
-      return "I won't kick myself"
-    end
-    if is_momod2(result.from.id, result.to.id) then -- Ignore mods,owner,admin
-      return "you can't kick mods,owner and admins"
-    end
-    chat_del_user(chat, 'user#id'..result.from.id, ok_cb, false)
-  else
-    return 'Use This in Your Groups'
-  end
-end
-
--- Kick by reply for admins
-function Kick_by_reply_admins(extra, success, result)
-  if result.to.type == 'chat' then
-    local chat = 'chat#id'..result.to.id
-    if tonumber(result.from.id) == tonumber(our_id) then -- Ignore bot
-      return "I won't kick myself"
-    end
-    if is_admin2(result.from.id) then -- Ignore admins
-      return
-    end
-    chat_del_user(chat, 'user#id'..result.from.id, ok_cb, false)
-  else
-    return 'Use This in Your Groups'
-  end
-end
-
---Ban by reply for admins
-function ban_by_reply(extra, success, result)
-  if result.to.type == 'chat' then
-  local chat = 'chat#id'..result.to.id
-  if tonumber(result.from.id) == tonumber(our_id) then -- Ignore bot
-      return "I won't ban myself"
-  end
-  if is_momod2(result.from.id, result.to.id) then -- Ignore mods,owner,admin
-    return "you can't kick mods,owner and admins"
-  end
-  ban_user(result.from.id, result.to.id)
-  send_large_msg(chat, "User "..result.from.id.." Banned")
-  else
-    return 'Use This in Your Groups'
-  end
-end
-
--- Ban by reply for admins
-function ban_by_reply_admins(extra, success, result)
-  if result.to.type == 'chat' then
-    local chat = 'chat#id'..result.to.id
-    if tonumber(result.from.id) == tonumber(our_id) then -- Ignore bot
-      return "I won't ban myself"
-    end
-    if is_admin2(result.from.id) then -- Ignore admins
-      return
-    end
-    ban_user(result.from.id, result.to.id)
-    send_large_msg(chat, "User "..result.from.id.." Banned")
-  else
-    return 'Use This in Your Groups'
-  end
-end
-
--- Unban by reply
-function unban_by_reply(extra, success, result) 
-  if result.to.type == 'chat' then
-    local chat = 'chat#id'..result.to.id
-    if tonumber(result.from.id) == tonumber(our_id) then -- Ignore bot
-      return "I won't unban myself"
-    end
-    send_large_msg(chat, "User "..result.from.id.." Unbanned")
-    -- Save on redis
-    local hash =  'banned:'..result.to.id
-    redis:srem(hash, result.from.id)
-  else
-    return 'Use This in Your Groups'
-  end
-end
-function banall_by_reply(extra, success, result)
-  if result.to.type == 'chat' then
-    local chat = 'chat#id'..result.to.id
-    if tonumber(result.from.id) == tonumber(our_id) then -- Ignore bot
-      return "I won't banall myself"
-    end
-    if is_admin2(result.from.id) then -- Ignore admins
-      return 
-    end
-    local name = user_print_name(result.from)
-    banall_user(result.from.id)
-    chat_del_user(chat, 'user#id'..result.from.id, ok_cb, false)
-    send_large_msg(chat, "User "..name.."["..result.from.id.."] hammered")
-  else
-    return 'Use This in Your Groups'
-  end
 end
